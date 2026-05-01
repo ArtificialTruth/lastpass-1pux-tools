@@ -1,6 +1,9 @@
 # LastPass 1PUX Tools 
-*Migrate to ProtonPass - with attachments uploaded!*  
+*[Created for migrating easily to ProtonPass](https://proton.me/support/pass-import-1password) - with attachments uploaded!*  
 Standalone scripts for exporting LastPass data (via `lpass`) to 1Password's `.1pux` format, including attachment handling and a small GUI wrapper.
+
+
+<img width="654" height="576" alt="2026-05-01_15-02" src="https://github.com/user-attachments/assets/4b4994e9-11ae-4e39-9e18-3c198edc315a" />
 
 ## Processing and Privacy
 
