@@ -13,6 +13,10 @@ Standalone scripts for exporting LastPass data (via `lpass`) to 1Password's `.1p
 - Output `.1pux` archives and `.skipped.csv` reports are written to local disk.
 - `.1pux` is unencrypted by design; treat it as sensitive data and delete it after import if no longer needed.
 
+## Why 1PUX?
+
+The [1Password Unencrypted Export (1PUX) format](https://support.1password.com/1pux-format/) puts vault items and attachments in **one** archive—easier to move than juggling separate CSV and attachment folders. Many password managers accept 1PUX imports, so it works well as a stepping stone when leaving LastPass. The file is a ZIP under the hood; renaming `.1pux` to `.zip` lets you browse or inspect contents manually.
+
 ## Files
 
 - `lastpass_to_1pux.py` - CLI exporter
