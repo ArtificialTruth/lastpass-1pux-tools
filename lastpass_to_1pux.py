@@ -549,7 +549,7 @@ def lp_item_to_records(
     export_tmp: Path,
     include_reprompt: bool = False,
     folder_mode: str = "tags",
-) -> tuple[list[dict[str, Any]], set[str], bool]:
+) -> tuple[list[dict[str, Any]], set[str], bool, bool]:
     """
     Produce 1Password item dicts (excluding outer ``vaults/items`` wrappers).
     Returns (records, filenames_used_inside_zip_under_files/)
@@ -617,6 +617,7 @@ def lp_item_to_records(
     plain_map = parse_show_plain_map(plaintext) if plaintext else {}
 
     attach_pairs = parse_attach_lines(plaintext) if plaintext else []
+    had_attachments = bool(attach_pairs) or bool(acc.get("attachpresent"))
     filenames_used: set[str] = set()
 
     records: list[dict[str, Any]] = []
@@ -695,7 +696,7 @@ def lp_item_to_records(
         )
 
     elif str(url_val) == "http://group":
-        return [], filenames_used, was_protected
+        return [], filenames_used, was_protected, had_attachments
 
     else:
         login_fields: list[dict[str, Any]] = []
@@ -780,7 +781,7 @@ def lp_item_to_records(
                 attach_pairs = parse_attach_lines(p2.stdout)
 
     if not records:
-        return records, filenames_used, was_protected
+        return records, filenames_used, was_protected, had_attachments
 
     # Embed attachments on the parent item.
     # Native 1PUX uses ``sections[].fields[].value.file``; many importers (incl. some
@@ -858,7 +859,7 @@ def lp_item_to_records(
                 "path": first_zip_relpath,
             }
 
-    return records, filenames_used, was_protected
+    return records, filenames_used, was_protected, had_attachments
 
 
 def build_grouping_lookup(sync: str) -> dict[str, str]:
@@ -891,12 +892,15 @@ def assemble_1pux(
     sync: str,
     include_reprompt: bool = False,
     protected_mode: str = "skip",
+    attachment_mode: str = "all",
     folder_mode: str = "tags",
     progress_callback: Callable[[int, int], None] | None = None,
     cancel_event: threading.Event | None = None,
 ) -> None:
     if protected_mode not in ("skip", "include", "only"):
         raise SystemExit("Invalid protected_mode; expected one of: skip, include, only")
+    if attachment_mode not in ("all", "only"):
+        raise SystemExit("Invalid attachment_mode; expected one of: all, only")
     include_reprompt = include_reprompt or (protected_mode in ("include", "only"))
 
     def _cancelled() -> None:
@@ -959,7 +963,7 @@ def assemble_1pux(
                 else:
                     grp = grouping_by_id.get(lp_id)
                     try:
-                        recs, _, was_protected = lp_item_to_records(
+                        recs, _, was_protected, had_attachments = lp_item_to_records(
                             acc,
                             grouping=grp,
                             sync=sync,
@@ -968,6 +972,8 @@ def assemble_1pux(
                             folder_mode=folder_mode,
                         )
                         if protected_mode == "only" and not was_protected:
+                            continue
+                        if attachment_mode == "only" and not had_attachments:
                             continue
                         if folder_mode == "path-tag":
                             vault_name = "Imported"
@@ -1165,6 +1171,17 @@ def main() -> None:
         help="Synthetic ``attrs.accountName`` / ``attrs.name`` in export.data.",
     )
     ap.add_argument(
+        "--attachment-mode",
+        dest="attachment_mode",
+        choices=("all", "only"),
+        default="all",
+        help=(
+            "Filter by attachments. "
+            "`all` (default) exports all items; "
+            "`only` exports only items with one or more attachments."
+        ),
+    )
+    ap.add_argument(
         "--protected-mode",
         dest="protected_mode",
         choices=("skip", "include", "only"),
@@ -1206,6 +1223,7 @@ def main() -> None:
         sync=ns.sync,
         include_reprompt=ns.include_reprompt,
         protected_mode=("include" if ns.include_reprompt else ns.protected_mode),
+        attachment_mode=ns.attachment_mode,
         folder_mode=ns.folder_mode,
     )
 

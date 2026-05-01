@@ -87,6 +87,16 @@ python3 lastpass_to_1pux.py -o ~/lastpass-export.1pux --protected-mode include
 python3 lastpass_to_1pux.py -o ~/lastpass-protected-only.1pux --protected-mode only
 ```
 
+Attachment filter:
+
+```bash
+# default: export all items
+python3 lastpass_to_1pux.py -o ~/lastpass-export.1pux --attachment-mode all
+
+# export only items that have attachments
+python3 lastpass_to_1pux.py -o ~/lastpass-attachments-only.1pux --attachment-mode only
+```
+
 GUI:
 
 ```bash

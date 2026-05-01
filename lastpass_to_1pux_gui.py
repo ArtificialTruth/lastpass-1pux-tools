@@ -32,6 +32,11 @@ PROTECTED_MODES: tuple[tuple[str, str], ...] = (
     ("Only protected items", "only"),
 )
 
+ATTACHMENT_MODES: tuple[tuple[str, str], ...] = (
+    ("All items (default)", "all"),
+    ("Only items with attachments", "only"),
+)
+
 
 def default_output_path() -> Path:
     home = Path.home()
@@ -264,8 +269,26 @@ class App(tk.Tk):
         _tip(protected_lbl, protected_help)
         _tip(self.protected_combo, protected_help)
 
+        attach_lbl = ttk.Label(frm, text="Attachment filter (i)")
+        attach_lbl.grid(row=8, column=0, sticky="e", **pad)
+        self.attach_combo = ttk.Combobox(
+            frm,
+            values=[label for label, _ in ATTACHMENT_MODES],
+            state="readonly",
+            width=44,
+        )
+        self.attach_combo.grid(row=8, column=1, columnspan=2, sticky="ew", **pad)
+        self.attach_combo.current(0)
+        attach_help = (
+            "Filter items by whether LastPass reports attachments:\n"
+            "• All items (default) — export everything.\n"
+            "• Only items with attachments — export just entries that have attachments."
+        )
+        _tip(attach_lbl, attach_help)
+        _tip(self.attach_combo, attach_help)
+
         btn_row = ttk.Frame(frm)
-        btn_row.grid(row=8, column=0, columnspan=3, **pad)
+        btn_row.grid(row=9, column=0, columnspan=3, **pad)
         self.export_btn = ttk.Button(btn_row, text="Export to 1PUX (i)", command=self._start_export)
         self.export_btn.pack(side=tk.LEFT, padx=(0, 8))
         self.cancel_btn = ttk.Button(btn_row, text="Cancel", command=self._cancel_export, state="disabled")
@@ -287,7 +310,7 @@ class App(tk.Tk):
         _tip(clear_btn, "Erase the log text only; it does not undo a finished export.")
 
         prog_fr = ttk.Frame(frm)
-        prog_fr.grid(row=9, column=0, columnspan=3, sticky="ew", **pad)
+        prog_fr.grid(row=10, column=0, columnspan=3, sticky="ew", **pad)
         self.progress_bar = ttk.Progressbar(prog_fr, mode="determinate", maximum=1, value=0)
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
         self.progress_label_var = tk.StringVar(value="")
@@ -301,8 +324,8 @@ class App(tk.Tk):
         _tip(prog_lbl, "Completed steps versus total (items plus final packaging).")
 
         log_frame = ttk.LabelFrame(frm, text="Log  (i)", padding=4)
-        log_frame.grid(row=10, column=0, columnspan=3, sticky="nsew", **pad)
-        frm.rowconfigure(10, weight=1)
+        log_frame.grid(row=11, column=0, columnspan=3, sticky="nsew", **pad)
+        frm.rowconfigure(11, weight=1)
         frm.columnconfigure(1, weight=1)
 
         self.log = tk.Text(log_frame, height=14, wrap="word", state="disabled", font=("TkFixedFont", 10))
@@ -315,7 +338,7 @@ class App(tk.Tk):
 
         self.status_var = tk.StringVar(value="Ready.")
         status_lbl = ttk.Label(frm, textvariable=self.status_var)
-        status_lbl.grid(row=11, column=0, columnspan=3, sticky="w", **pad)
+        status_lbl.grid(row=12, column=0, columnspan=3, sticky="w", **pad)
         _tip(
             self.log,
             "Standard error from the export process (progress, item counts, paths). "
@@ -361,6 +384,12 @@ class App(tk.Tk):
             return "skip"
         return PROTECTED_MODES[idx][1]
 
+    def _attachment_mode_value(self) -> str:
+        idx = self.attach_combo.current()
+        if idx < 0:
+            return "all"
+        return ATTACHMENT_MODES[idx][1]
+
     def _apply_progress(self, done: int, total: int) -> None:
         if total <= 0:
             total = 1
@@ -391,6 +420,7 @@ class App(tk.Tk):
         sync = self.sync_var.get().strip() or "auto"
         folder_mode = self._folder_mode_value()
         protected_mode = self._protected_mode_value()
+        attachment_mode = self._attachment_mode_value()
 
         self._cancel_event = threading.Event()
         self._apply_progress(0, 1)
@@ -413,6 +443,7 @@ class App(tk.Tk):
                         account_label=account,
                         sync=sync,
                         protected_mode=protected_mode,
+                        attachment_mode=attachment_mode,
                         folder_mode=folder_mode,
                         progress_callback=report_progress,
                         cancel_event=self._cancel_event,
