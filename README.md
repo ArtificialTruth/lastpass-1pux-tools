@@ -74,6 +74,19 @@ See upstream issue threads:
 python3 lastpass_to_1pux.py -o ~/lastpass-export.1pux
 ```
 
+Protected-item handling:
+
+```bash
+# default: skip Password Reprompt items
+python3 lastpass_to_1pux.py -o ~/lastpass-export.1pux --protected-mode skip
+
+# include both normal + protected items (may prompt for protected entries)
+python3 lastpass_to_1pux.py -o ~/lastpass-export.1pux --protected-mode include
+
+# follow-up run: export only protected items
+python3 lastpass_to_1pux.py -o ~/lastpass-protected-only.1pux --protected-mode only
+```
+
 GUI:
 
 ```bash

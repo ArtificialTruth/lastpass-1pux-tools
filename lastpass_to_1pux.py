@@ -549,7 +549,7 @@ def lp_item_to_records(
     export_tmp: Path,
     include_reprompt: bool = False,
     folder_mode: str = "tags",
-) -> tuple[list[dict[str, Any]], set[str]]:
+) -> tuple[list[dict[str, Any]], set[str], bool]:
     """
     Produce 1Password item dicts (excluding outer ``vaults/items`` wrappers).
     Returns (records, filenames_used_inside_zip_under_files/)
@@ -587,6 +587,7 @@ def lp_item_to_records(
     created = updated = lastpass_ts(acc.get("last_modified_gmt"))
 
     plaintext = ""
+    was_protected = False
     if ident:
         p = run_lpass(["show", f"--sync={sync}", "--color=never", "--all", ident], allow_prompt=include_reprompt)
         if p.returncode == 0:
@@ -596,6 +597,7 @@ def lp_item_to_records(
             if looks_like_pwprotect_error(err) or (
                 not include_reprompt and looks_unprompted_failure(err)
             ):
+                was_protected = True
                 if not include_reprompt:
                     raise SkipReprompt(
                         "password reprompt (lpass refused to decrypt without prompt)"
@@ -607,8 +609,10 @@ def lp_item_to_records(
             # Nonfatal: keep plaintext empty and try to use JSON-only data.
             plaintext = ""
 
-    if detect_reprompt(plaintext) and not include_reprompt:
-        raise SkipReprompt("password reprompt flag set on item")
+    if detect_reprompt(plaintext):
+        was_protected = True
+        if not include_reprompt:
+            raise SkipReprompt("password reprompt flag set on item")
 
     plain_map = parse_show_plain_map(plaintext) if plaintext else {}
 
@@ -691,7 +695,7 @@ def lp_item_to_records(
         )
 
     elif str(url_val) == "http://group":
-        return [], filenames_used
+        return [], filenames_used, was_protected
 
     else:
         login_fields: list[dict[str, Any]] = []
@@ -776,7 +780,7 @@ def lp_item_to_records(
                 attach_pairs = parse_attach_lines(p2.stdout)
 
     if not records:
-        return records, filenames_used
+        return records, filenames_used, was_protected
 
     # Embed attachments on the parent item.
     # Native 1PUX uses ``sections[].fields[].value.file``; many importers (incl. some
@@ -854,7 +858,7 @@ def lp_item_to_records(
                 "path": first_zip_relpath,
             }
 
-    return records, filenames_used
+    return records, filenames_used, was_protected
 
 
 def build_grouping_lookup(sync: str) -> dict[str, str]:
@@ -886,10 +890,15 @@ def assemble_1pux(
     account_label: str,
     sync: str,
     include_reprompt: bool = False,
+    protected_mode: str = "skip",
     folder_mode: str = "tags",
     progress_callback: Callable[[int, int], None] | None = None,
     cancel_event: threading.Event | None = None,
 ) -> None:
+    if protected_mode not in ("skip", "include", "only"):
+        raise SystemExit("Invalid protected_mode; expected one of: skip, include, only")
+    include_reprompt = include_reprompt or (protected_mode in ("include", "only"))
+
     def _cancelled() -> None:
         if cancel_event is not None and cancel_event.is_set():
             raise ExportCancelled()
@@ -950,7 +959,7 @@ def assemble_1pux(
                 else:
                     grp = grouping_by_id.get(lp_id)
                     try:
-                        recs, _ = lp_item_to_records(
+                        recs, _, was_protected = lp_item_to_records(
                             acc,
                             grouping=grp,
                             sync=sync,
@@ -958,6 +967,8 @@ def assemble_1pux(
                             include_reprompt=include_reprompt,
                             folder_mode=folder_mode,
                         )
+                        if protected_mode == "only" and not was_protected:
+                            continue
                         if folder_mode == "path-tag":
                             vault_name = "Imported"
                         elif folder_mode in ("vaults", "proton-accounts"):
@@ -1154,15 +1165,22 @@ def main() -> None:
         help="Synthetic ``attrs.accountName`` / ``attrs.name`` in export.data.",
     )
     ap.add_argument(
+        "--protected-mode",
+        dest="protected_mode",
+        choices=("skip", "include", "only"),
+        default="skip",
+        help=(
+            "How to handle LastPass Password Reprompt items. "
+            "`skip` (default) skips protected items; "
+            "`include` exports both protected and non-protected items; "
+            "`only` exports only protected items."
+        ),
+    )
+    ap.add_argument(
         "--include-reprompt",
         dest="include_reprompt",
         action="store_true",
-        help=(
-            "Process LastPass items that have Password Reprompt enabled. "
-            "By default these are skipped and listed in <output>.skipped.csv "
-            "because lpass may interactively re-prompt for the master password "
-            "once per affected item."
-        ),
+        help="Deprecated alias for `--protected-mode include`.",
     )
     ap.add_argument(
         "--folder-mode",
@@ -1187,6 +1205,7 @@ def main() -> None:
         account_label=ns.account_name,
         sync=ns.sync,
         include_reprompt=ns.include_reprompt,
+        protected_mode=("include" if ns.include_reprompt else ns.protected_mode),
         folder_mode=ns.folder_mode,
     )
 

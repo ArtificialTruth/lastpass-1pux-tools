@@ -26,6 +26,12 @@ FOLDER_MODES: tuple[tuple[str, str], ...] = (
     ("Proton: one synthetic account per folder", "proton-accounts"),
 )
 
+PROTECTED_MODES: tuple[tuple[str, str], ...] = (
+    ("Skip protected items (default)", "skip"),
+    ("Include protected + non-protected items", "include"),
+    ("Only protected items", "only"),
+)
+
 
 def default_output_path() -> Path:
     home = Path.home()
@@ -239,20 +245,24 @@ class App(tk.Tk):
         _tip(folder_lbl, folder_help)
         _tip(self.folder_combo, folder_help)
 
-        self.reprompt_var = tk.BooleanVar(value=False)
-        reprompt_cb = ttk.Checkbutton(
+        protected_lbl = ttk.Label(frm, text="Protected items (i)")
+        protected_lbl.grid(row=7, column=0, sticky="e", **pad)
+        self.protected_combo = ttk.Combobox(
             frm,
-            text="Include password-reprompt items (may prompt in terminal for each item) (i)",
-            variable=self.reprompt_var,
+            values=[label for label, _ in PROTECTED_MODES],
+            state="readonly",
+            width=44,
         )
-        reprompt_cb.grid(row=7, column=0, columnspan=3, sticky="w", **pad)
-        _tip(
-            reprompt_cb,
-            "Off (default): items with LastPass “Password Reprompt” are skipped and listed in "
-            "the .skipped.csv file, because lpass may ask for the master password once per "
-            "item. On: those items are included; run the GUI from a terminal if lpass needs "
-            "interactive input. Equivalent to CLI `--include-reprompt`.",
+        self.protected_combo.grid(row=7, column=1, columnspan=2, sticky="ew", **pad)
+        self.protected_combo.current(0)
+        protected_help = (
+            "How to handle LastPass Password Reprompt entries:\n"
+            "• Skip protected items (default) — fastest, writes skipped list to .skipped.csv.\n"
+            "• Include protected + non-protected — may prompt for master password per protected item.\n"
+            "• Only protected items — exports just reprompt-protected entries (useful for follow-up runs)."
         )
+        _tip(protected_lbl, protected_help)
+        _tip(self.protected_combo, protected_help)
 
         btn_row = ttk.Frame(frm)
         btn_row.grid(row=8, column=0, columnspan=3, **pad)
@@ -345,6 +355,12 @@ class App(tk.Tk):
             return "tags"
         return FOLDER_MODES[idx][1]
 
+    def _protected_mode_value(self) -> str:
+        idx = self.protected_combo.current()
+        if idx < 0:
+            return "skip"
+        return PROTECTED_MODES[idx][1]
+
     def _apply_progress(self, done: int, total: int) -> None:
         if total <= 0:
             total = 1
@@ -374,7 +390,7 @@ class App(tk.Tk):
         account = self.account_var.get().strip() or "LastPass import"
         sync = self.sync_var.get().strip() or "auto"
         folder_mode = self._folder_mode_value()
-        include_reprompt = self.reprompt_var.get()
+        protected_mode = self._protected_mode_value()
 
         self._cancel_event = threading.Event()
         self._apply_progress(0, 1)
@@ -396,7 +412,7 @@ class App(tk.Tk):
                         email=email,
                         account_label=account,
                         sync=sync,
-                        include_reprompt=include_reprompt,
+                        protected_mode=protected_mode,
                         folder_mode=folder_mode,
                         progress_callback=report_progress,
                         cancel_event=self._cancel_event,
